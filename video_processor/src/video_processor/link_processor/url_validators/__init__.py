@@ -1,0 +1,2 @@
+from .tiktok_validator import validate_tiktok_link
+from .you_tube_validator import validate_you_tube_link

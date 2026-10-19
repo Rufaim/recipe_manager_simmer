@@ -1,0 +1,22 @@
+[project]
+name = "video-processor"
+version = "0.1.0"
+description = "recipe downloader"
+readme = "README.md"
+authors = [
+    { name = "Rufaim", email = "pavelrumyancew@yandex.ru" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "cyclopts>=5.1.1",
+    "python-dotenv",
+    "requests>=2.34.2",
+    "rich",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[project.scripts]
+video_processor = "video_processor.__main__:app"
