@@ -21,6 +21,19 @@ LLM_MODEL_NAME = <model name for the endpoint>
 ```
 
 ## Usage
+Check the environment setup (yt-dlp, curl, `.env`, LLM endpoint) with the doctor command
+```bash
+uv run video_processor doctor
+```
+
+Make a recipe 
+```bash
+uv run video_processor download -v <link to YouTube / TikTok video> [-o <dir to store artifacts>]
+```
+
+### Stages
+You can run download and extract stages separately
+
 Download the recipes with the download command
 ```bash
 uv run video_processor download -v <link to YouTube / TikTok video> [-o <dir to store artifacts>]
@@ -29,9 +42,4 @@ uv run video_processor download -v <link to YouTube / TikTok video> [-o <dir to 
 Extract the recipes with the recipe command
 ```bash
 uv run video_processor recipe -p <path to artifact dir>
-```
-
-Check the environment setup (yt-dlp, curl, `.env`, LLM endpoint) with the doctor command
-```bash
-uv run video_processor doctor
 ```

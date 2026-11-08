@@ -6,7 +6,7 @@ from pathlib import Path
 from .link_url_type import LinkURL
 
 
-def download_metadata_subtitles_thumbnail(video_url: LinkURL, save_path: Path, language_preference: str):
+def download_metadata_subtitles_thumbnail(video_url: LinkURL, save_path: Path, language_preference: str) -> Path:
     yt_dlp_path = os.getenv("YT_DLP_PATH")
     language_preferences = language_preference.split(";")
     # Download video metadata
@@ -36,3 +36,4 @@ def download_metadata_subtitles_thumbnail(video_url: LinkURL, save_path: Path, l
     raw_metadata.save_subtitles(work_path)
     # Download thumbnail into the working directory
     raw_metadata.save_thumbnail(work_path)
+    return work_path

@@ -237,7 +237,7 @@ wheels = [
 ]
 
 [[package]]
-name = "video-descriptor"
+name = "video-processor"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

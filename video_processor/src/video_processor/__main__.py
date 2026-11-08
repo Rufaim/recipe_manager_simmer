@@ -65,11 +65,41 @@ def validate_language_preference(type_, value: str) -> None:
 load_dotenv()
 app = App(name="you_tube_video_descriptor")
 
+@app.default
+def main(video_url: Annotated[LinkURL, Parameter(n_tokens=1, converter=convert_tokens2LinkUrl,
+                                    validator=validate_video_url, name=["--video_url", "-v"], accepts_keys=False)],
+        save_path: Annotated[Literal["temp"] | Annotated[Path, Parameter(validator=validators.Path(exists=True))], Parameter(name=["--save_path", "-o"])] = "temp",
+        language_preference: Annotated[str, Parameter(validator=validate_language_preference)] = "ru;en;fr",
+        verbose: bool = False
+        ):
+   video_path = _download(video_url, save_path, language_preference, verbose)
+   _extract_recipe(video_path, verbose=verbose)
+
+
+def _download(video_url: LinkURL,
+        save_path: Literal["temp"] | Path = "temp",
+        language_preference: str = "ru;en;fr",
+        verbose: bool = False
+    ):
+    if save_path == "temp":
+        save_path_ = Path(tempfile.gettempdir()).joinpath("video_processed")
+    else:
+        save_path_ = save_path
+
+    if verbose:
+        print(f"Downloading to \"{save_path_}\"")
+    video_path = download_metadata_subtitles_thumbnail(video_url, save_path_, language_preference)
+    if verbose:
+        print(f"Metadata saved to \"{video_path}\"")
+    return video_path
+
+
 @app.command
 def download(video_url: Annotated[LinkURL, Parameter(n_tokens=1, converter=convert_tokens2LinkUrl,
                                     validator=validate_video_url, name=["--video_url", "-v"], accepts_keys=False)],
         save_path: Annotated[Literal["temp"] | Annotated[Path, Parameter(validator=validators.Path(exists=True))], Parameter(name=["--save_path", "-o"])] = "temp",
-        language_preference: Annotated[str, Parameter(validator=validate_language_preference)] = "ru;en;fr"
+        language_preference: Annotated[str, Parameter(validator=validate_language_preference)] = "ru;en;fr",
+        verbose: bool = False
         ):
     """Download a video's metadata, subtitles and thumbnail.
 
@@ -100,17 +130,29 @@ def download(video_url: Annotated[LinkURL, Parameter(n_tokens=1, converter=conve
         Semicolon-separated lowercase 2-letter subtitle language codes, tried
         in order (default ``ru;en;fr``).
     """
+    _download(video_url, save_path, language_preference, verbose)
 
-    if save_path == "temp":
-        save_path_ = Path(tempfile.gettempdir()).joinpath("video_processed")
-    else:
-        save_path_ = save_path
 
-    download_metadata_subtitles_thumbnail(video_url, save_path_, language_preference)
+def _extract_recipe(video_folder_path: Path,
+    force_extract: bool = False,
+    verbose: bool = False
+    ):
+    if verbose:
+        print(f"Constructing a prompt from the metadata: {video_folder_path}")
+    prompt = extract_prompt_from_video(video_folder_path, force_extract)
+    if verbose:
+        print("Processing with LLM")
+    recipe = process_with_llm(prompt)
+    if verbose:
+        print("Saving the extracted recipe")
+    save_extracted_recipe(recipe, video_folder_path)
+
 
 @app.command(alias='recipe')
 def extract_recipe(video_folder_path: Annotated[Path, Parameter(validator=validators.Path(exists=True), name=["--path", "-p"])],
-    force_extract: bool = False):
+    force_extract: bool = False,
+    verbose: bool = False
+    ):
     """Build LLM prompt for a previously downloaded video.
 
     Reads metadata (and, when present, subtitles) from the given per-video
@@ -130,9 +172,7 @@ def extract_recipe(video_folder_path: Annotated[Path, Parameter(validator=valida
     force_extract
         Forces prompt re-extraction, if the prompt file exists.
     """
-    prompt = extract_prompt_from_video(video_folder_path, force_extract)
-    recipe = process_with_llm(prompt)
-    save_extracted_recipe(recipe, video_folder_path)
+    _extract_recipe(video_folder_path, force_extract, verbose)
 
 
 @app.command
