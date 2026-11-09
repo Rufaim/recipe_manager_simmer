@@ -19,9 +19,9 @@ class YouTubeMetadataExtractor(VideoMetadataExtractor):
         selected_subtitles_url = None
         if video_lang in language_preferences:
             if video_lang in subtitles:
-                selected_subtitles_url = get_subtitles_link_in_str(subtitles[video_lang])
+                selected_subtitles_url = get_subtitles_link_in_str(subtitles.get(video_lang))
             else:
-                selected_subtitles_url = get_subtitles_link_in_str(automatic_captions[video_lang])
+                selected_subtitles_url = get_subtitles_link_in_str(automatic_captions.get(video_lang))
         else:
             selected_subtitles_url = get_subtitles_link_on_lang(language_preferences, subtitles)
             if selected_subtitles_url is None:

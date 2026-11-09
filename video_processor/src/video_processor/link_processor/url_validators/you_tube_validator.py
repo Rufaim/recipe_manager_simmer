@@ -3,7 +3,7 @@ from urllib.parse import parse_qs
 
 _VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
 
-def validate_you_tube_link(url: str,host: str, path: str, query: str):
+def validate_you_tube_link(url: str, host: str, path: str, query: str):
     """Raise ValueError unless ``url`` is a supported YouTube link.
 
     Host dispatch is done upstream by ``convert_tokens2LinkUrl``, so this only

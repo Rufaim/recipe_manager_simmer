@@ -92,11 +92,11 @@ def validate_paths_exist(type_, values: list[Path]) -> None:
         raise ValueError(err_msg)
 
 load_dotenv()
-app = App(name="you_tube_video_descriptor")
+app = App(name="video_processor")
 
 @app.default
 def main(video_urls: Annotated[list[LinkURL], Parameter(n_tokens=1, converter=convert_tokens2list_of_LinkUrl,
-                                    validator=validate_video_urls, name=["--video_url", "-v"], accepts_keys=False)],
+                                    validator=validate_video_urls, name=["--video_url", "-v"], consume_multiple=True, accepts_keys=False)],
         save_path: Annotated[Literal["temp"] | Annotated[Path, Parameter(validator=validators.Path(exists=True))], Parameter(name=["--save_path", "-o"])] = "temp",
         language_preference: Annotated[str, Parameter(validator=validate_language_preference)] = "ru;en;fr",
         verbose: bool = False

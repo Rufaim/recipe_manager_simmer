@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import requests
 from dotenv import find_dotenv
 
-from .llm_provider import join_api_path
+from .utils import join_api_path
 
 
 class CheckStatus(StrEnum):

@@ -3,10 +3,7 @@ import time
 
 import requests
 
-
-def join_api_path(base_url: str, suffix: str) -> str:
-    """Append ``suffix`` to an API base URL, tolerating a trailing slash."""
-    return f"{base_url.rstrip('/')}/{suffix}"
+from .utils import join_api_path
 
 
 class OpenAICompatibleLLMProvider(object):
@@ -90,7 +87,7 @@ class OpenAICompatibleLLMProvider(object):
                 # Extract the assistant message with reasoning_details
                 return response.json()["choices"][0]["message"]
 
-            if response.status_code in (429, *range(500, 600)) and attempt < MAX_RETRIES-1:
+            if response.status_code in (429, *range(500, 600)) and attempt < self.max_retries-1:
                 retry_after = response.headers.get("Retry-After")
                 if retry_after is not None:
                     try:

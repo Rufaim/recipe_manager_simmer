@@ -14,7 +14,5 @@ def validate_tiktok_link(url: str, host: str, path: str, query: str) -> None:
     than CLI validation.
     """
     # Hosts whose video pages are served at ``/<user>/video/<id>``.
-    if host in {"tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com"}:
-        return
     if not _VIDEO_PATH_RE.match(path):
         raise ValueError(f"No TikTok video ID in URL: {url!r}")

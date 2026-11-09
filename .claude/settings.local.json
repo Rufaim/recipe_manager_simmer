@@ -11,5 +11,6 @@
       "Read(*/processed_video/*)",
       "Read(*.json)"
     ]
-  }
+  },
+  "skillOverrides": {}
 }
