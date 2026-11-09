@@ -22,6 +22,9 @@ Rules:
 - Base the recipe strictly on the provided content. When no transcription is available, work
   from the title and description only — never invent ingredients, quantities or steps that the
   content does not support.
+- When the video description contains quantities (the typed recipe is often posted there),
+  prefer those measurements over spoken ones from the transcription, which are often
+  approximate or could be misheard.
 - Recipe name: use the real, conventional name of the dish cooked in the video. Usually it
   is mentioned in the video. Never invent a name and never copy the video title
   (titles are often clickbait). If the video features a specific variant, briefly append
