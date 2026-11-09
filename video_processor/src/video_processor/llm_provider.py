@@ -1,4 +1,5 @@
 import os
+import time
 
 import requests
 
@@ -10,9 +11,16 @@ def join_api_path(base_url: str, suffix: str) -> str:
 
 class OpenAICompatibleLLMProvider(object):
     def __init__(self, base_url: str | None = None,
-                    api_key: str | None = None) -> None:
+                    api_key: str | None = None,
+                    timeout: tuple[int,int] | int = (10, 120), # connect, read — read is long: reasoning-enabled replies are slow
+                    max_retries = 2,
+                    retry_backoff_secs = 2
+    ) -> None:
         self.base_url = base_url
         self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_backoff_secs = retry_backoff_secs
 
     @property
     def _url(self) -> str:
@@ -54,17 +62,43 @@ class OpenAICompatibleLLMProvider(object):
                     "or set the 'LLM_MODEL_NAME' environment variable."
                 )
 
-        # First API call with reasoning
-        response = requests.post(
-          url=self._url,
-          headers=self._headers,
-          json={
+        payload = {
             "model": model,
             "messages": messages,
-            "reasoning": {"enabled": reasoning}
-          }
-        )
+            "reasoning": {"enabled": reasoning},
+        }
 
-        # Extract the assistant message with reasoning_details
-        response = response.json()
-        return response['choices'][0]['message']
+        delay = self.retry_backoff_secs
+        for attempt in range(self.max_retries):
+            if attempt > 0:
+                time.sleep(delay)
+
+            try:
+                response = requests.post(
+                    url=self._url,
+                    headers=self._headers,
+                    json=payload,
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as exc:
+                # Timeout/connection errors are bounded and NOT retried: the provider
+                # may have completed and billed the request anyway, so replaying
+                # could duplicate work.
+                raise RuntimeError(f"LLM API request failed: {exc}") from exc
+
+            if response.ok:
+                # Extract the assistant message with reasoning_details
+                return response.json()["choices"][0]["message"]
+
+            if response.status_code in (429, *range(500, 600)) and attempt < MAX_RETRIES-1:
+                retry_after = response.headers.get("Retry-After")
+                if retry_after is not None:
+                    try:
+                        delay = float(retry_after)
+                    except ValueError:
+                        delay = self.retry_backoff_secs
+                continue
+
+            raise RuntimeError(
+                f"LLM API returned HTTP {response.status_code}: {response.text[:500]}"
+            )
