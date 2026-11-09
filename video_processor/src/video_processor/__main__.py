@@ -106,7 +106,9 @@ def main(video_urls: Annotated[list[LinkURL], Parameter(n_tokens=1, converter=co
     Runs the ``download`` and ``extract_recipe`` stages back-to-back for every
     given URL: fetch metadata, subtitles and thumbnail, then build the LLM
     prompt and write the extracted markdown recipe into the same per-video
-    ``<video_id>/`` folder.
+    ``<video_id>/`` folder. Videos that do not contain a recipe (the LLM
+    returns ``NO_RECIPE``) raise an error and stop the batch processing, so
+    you can verify the links.
 
     Parameters
     ----------
@@ -218,7 +220,8 @@ def extract_recipe(video_folder_paths: Annotated[list[Path], Parameter(validator
     the transcript marked as unavailable.
 
     Raises ``RuntimeError`` if a folder does not contain the metadata file,
-    i.e. the video wasn't processed by ``download``.
+    i.e. the video wasn't processed by ``download``, or if the LLM decides
+    the video is not a recipe.
 
     Parameters
     ----------

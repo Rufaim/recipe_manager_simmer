@@ -91,6 +91,8 @@ def save_extracted_recipe(recipe: str, video_folder_path: Path):
     id = video_folder_path.name
     recipe_path = video_folder_path.joinpath(f"recipe.md")
 
+    if "NO_RECIPE" in recipe:
+        raise RuntimeError(f"Video {id} has no recipe.")
     if not recipe:
         raise RuntimeError(f"The recipe is empty for the video {id}.")
 
