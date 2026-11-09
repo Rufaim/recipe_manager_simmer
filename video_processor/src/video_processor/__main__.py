@@ -4,13 +4,17 @@ from pathlib import Path
 from typing import Annotated, Literal, Sequence
 from urllib.parse import urlsplit
 
-from cyclopts import App, Parameter, validators, Token
+from cyclopts import App, Parameter, Token, validators
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.text import Text
 
 from .doctor import run_doctor
-from .link_processor import download_metadata_subtitles_thumbnail, LinkURL, LinkSourceType
+from .link_processor import (
+    LinkSourceType,
+    LinkURL,
+    download_metadata_subtitles_thumbnail,
+)
 from .recipe_extractor import (
     extract_prompt_from_video,
     process_with_llm,
@@ -18,8 +22,12 @@ from .recipe_extractor import (
 )
 
 
-def convert_tokens2LinkUrl(type_, tokens: Sequence[Token]) -> LinkURL:
-    url = tokens[0].value
+def convert_tokens2list_of_LinkUrl(type_, tokens: Sequence[Token]) -> list[LinkURL]:
+    return [convert_tokenvalue2LinkUrl(t.value)
+        for t in tokens
+    ]
+
+def convert_tokenvalue2LinkUrl(url: str) -> LinkURL:
     parsed = urlsplit(url)
     host = parsed.hostname or ""
     if host in {"youtube.com", "www.youtube.com", "m.youtube.com",
@@ -48,11 +56,19 @@ def convert_tokens2LinkUrl(type_, tokens: Sequence[Token]) -> LinkURL:
     )
 
 
-def validate_video_url(type_, value: LinkURL) -> None:
+def validate_video_urls(type_, values: list[LinkURL]) -> None:
     """Raise ValueError unless ``value`` is a supported YouTube or TikTok URL."""
-    if value.type is LinkSourceType.UNKNOWN:
-        raise ValueError(f"Unregistered source of URL: {value.url!r}")
-    value.validate_url()
+    errors = []
+    for v in values:
+        try:
+            v.validate_url()
+        except (RuntimeError, ValueError) as e:
+            errors.append(str(e))
+
+    if len(errors) > 0:
+        errors = "\n".join(errors)
+        err_msg = Text(f"\n\n{errors}", no_wrap=True)
+        raise ValueError(err_msg)
 
 
 def validate_language_preference(type_, value: str) -> None:
@@ -62,21 +78,53 @@ def validate_language_preference(type_, value: str) -> None:
             f"language_preference must be ';'-separated 2-letter codes, e.g. 'en;fr', got {value!r}"
         )
 
+
+def validate_paths_exist(type_, values: list[Path]) -> None:
+    """Raise ValueError unless ``value`` is an existing path."""
+    errors = [f"Path \"{v}\" does not exist"
+        for v in values
+        if not v.exists()
+    ]
+
+    if len(errors) > 0:
+        errors = "\n".join(errors)
+        err_msg = Text(f"\n\n{errors}", no_wrap=True)
+        raise ValueError(err_msg)
+
 load_dotenv()
 app = App(name="you_tube_video_descriptor")
 
 @app.default
-def main(video_url: Annotated[LinkURL, Parameter(n_tokens=1, converter=convert_tokens2LinkUrl,
-                                    validator=validate_video_url, name=["--video_url", "-v"], accepts_keys=False)],
+def main(video_urls: Annotated[list[LinkURL], Parameter(n_tokens=1, converter=convert_tokens2list_of_LinkUrl,
+                                    validator=validate_video_urls, name=["--video_url", "-v"], accepts_keys=False)],
         save_path: Annotated[Literal["temp"] | Annotated[Path, Parameter(validator=validators.Path(exists=True))], Parameter(name=["--save_path", "-o"])] = "temp",
         language_preference: Annotated[str, Parameter(validator=validate_language_preference)] = "ru;en;fr",
         verbose: bool = False
         ):
-   video_path = _download(video_url, save_path, language_preference, verbose)
-   _extract_recipe(video_path, verbose=verbose)
+    """Download one or more videos and extract a recipe from each.
+
+    Runs the ``download`` and ``extract_recipe`` stages back-to-back for every
+    given URL: fetch metadata, subtitles and thumbnail, then build the LLM
+    prompt and write the extracted markdown recipe into the same per-video
+    ``<video_id>/`` folder.
+
+    Parameters
+    ----------
+    video_urls
+        One or more YouTube or TikTok URLs to process.
+    save_path
+        Where the per-video ``<video_id>/`` output folder is created. Pass
+        ``temp`` (the default) for ``<system temp dir>/video_processed``, or a
+        path to an existing directory.
+    language_preference
+        Semicolon-separated lowercase 2-letter subtitle language codes, tried
+        in order (default ``ru;en;fr``).
+    """
+    video_paths = _download(video_urls, save_path, language_preference, verbose)
+    _extract_recipe(video_paths, verbose=verbose)
 
 
-def _download(video_url: LinkURL,
+def _download(video_urls: list[LinkURL],
         save_path: Literal["temp"] | Path = "temp",
         language_preference: str = "ru;en;fr",
         verbose: bool = False
@@ -88,91 +136,98 @@ def _download(video_url: LinkURL,
 
     if verbose:
         print(f"Downloading to \"{save_path_}\"")
-    video_path = download_metadata_subtitles_thumbnail(video_url, save_path_, language_preference)
-    if verbose:
-        print(f"Metadata saved to \"{video_path}\"")
-    return video_path
+
+    video_paths = []
+    for vurl in video_urls:
+        video_path = download_metadata_subtitles_thumbnail(vurl, save_path_, language_preference)
+        if verbose:
+            print(f"Metadata saved to \"{video_path}\"")
+        video_paths.append(video_path)
+    return video_paths
 
 
 @app.command
-def download(video_url: Annotated[LinkURL, Parameter(n_tokens=1, converter=convert_tokens2LinkUrl,
-                                    validator=validate_video_url, name=["--video_url", "-v"], accepts_keys=False)],
+def download(video_urls: Annotated[list[LinkURL], Parameter(n_tokens=1, converter=convert_tokens2list_of_LinkUrl,
+                                    validator=validate_video_urls, name=["--video_url", "-v"], consume_multiple=True, accepts_keys=False)],
         save_path: Annotated[Literal["temp"] | Annotated[Path, Parameter(validator=validators.Path(exists=True))], Parameter(name=["--save_path", "-o"])] = "temp",
         language_preference: Annotated[str, Parameter(validator=validate_language_preference)] = "ru;en;fr",
         verbose: bool = False
         ):
-    """Download a video's metadata, subtitles and thumbnail.
+    """Download each video's metadata, subtitles and thumbnail.
 
-    Fetches the video's metadata with yt-dlp and writes it into ``<save_path>/<video_id>/``:
-    ``raw_metadata_<video_id>.json``, the thumbnail (extension taken from its
-    URL) and, for videos that expose caption tracks, ``subtitles_<video_id>.srt``.
+    Fetches the videos' metadata with yt-dlp and writes each into
+    ``<save_path>/<video_id>/``: ``raw_metadata_<video_id>.json``, the
+    thumbnail (extension taken from its URL) and, for videos that expose
+    caption tracks, ``subtitles_<video_id>.srt``.
     The subtitle track is chosen by trying ``language_preference`` codes in
     order, preferring the video's own language and manual subtitles over
     automatic captions (ASR). Videos without captions (common on TikTok) are
     saved without an SRT file; the recipe stage then works from title and
     description.
 
-    Requires ``YT_DLP_PATH`` in the environment (by default loaded from environment) pointing
-    at a yt-dlp binary, plus ``curl`` and network access.
+    Requires ``YT_DLP_PATH`` in the environment pointing at a yt-dlp binary,
+    plus ``curl`` and network access.
 
     Parameters
     ----------
-    video_url
-        URL of the video to process — a YouTube ``watch?v=``/``youtu.be/<id>``
-        link, a TikTok ``tiktok.com/@<user>/video/<id>`` link, or a TikTok
-        ``vm.tiktok.com`` share short link.
+    video_urls
+        One or more URLs of the video to process — a YouTube
+        ``watch?v=``/``youtu.be/<id>`` link, a TikTok
+        ``tiktok.com/@<user>/video/<id>`` link, or a TikTok ``vm.tiktok.com``
+        share short link.
     save_path
-        Where the per-video ``<video_id>/`` output folder is created (re-run
-        overwrites its files). Pass ``temp`` (the default) to write to
+        Where the per-video ``<video_id>/`` output folders are created (re-run
+        overwrites their files). Pass ``temp`` (the default) to write to
         ``<system temp dir>/video_processed``, or a path to an existing
         directory.
     language_preference
         Semicolon-separated lowercase 2-letter subtitle language codes, tried
         in order (default ``ru;en;fr``).
     """
-    _download(video_url, save_path, language_preference, verbose)
+    _download(video_urls, save_path, language_preference, verbose)
 
 
-def _extract_recipe(video_folder_path: Path,
+def _extract_recipe(video_folder_paths: list[Path],
     force_extract: bool = False,
     verbose: bool = False
     ):
-    if verbose:
-        print(f"Constructing a prompt from the metadata: {video_folder_path}")
-    prompt = extract_prompt_from_video(video_folder_path, force_extract)
-    if verbose:
-        print("Processing with LLM")
-    recipe = process_with_llm(prompt)
-    if verbose:
-        print("Saving the extracted recipe")
-    save_extracted_recipe(recipe, video_folder_path)
+    for vp in video_folder_paths:
+        if verbose:
+            print(f"Constructing a prompt from the metadata: {vp}")
+        prompt = extract_prompt_from_video(vp, force_extract)
+        if verbose:
+            print("Processing with LLM")
+        recipe = process_with_llm(prompt)
+        if verbose:
+            print("Saving the extracted recipe")
+        save_extracted_recipe(recipe, vp)
 
 
 @app.command(alias='recipe')
-def extract_recipe(video_folder_path: Annotated[Path, Parameter(validator=validators.Path(exists=True), name=["--path", "-p"])],
+def extract_recipe(video_folder_paths: Annotated[list[Path], Parameter(validator=validate_paths_exist, consume_multiple=True, name=["--path", "-p"])],
     force_extract: bool = False,
     verbose: bool = False
     ):
-    """Build LLM prompt for a previously downloaded video.
+    """Build an LLM prompt for each previously downloaded video.
 
-    Reads metadata (and, when present, subtitles) from the given per-video
+    Reads metadata (and, when present, subtitles) from each given per-video
     folder and returns the prompt. The prompt is logged into
     ``combined_prompt_<video_id>.txt`` in the same folder. If ``force_extract``
     flag is provided, the prompt is regenerated. Videos without captions
     (most TikTok videos) are processed from their title and description, with
     the transcript marked as unavailable.
 
-    Raises ``RuntimeError`` if the folder does not contain the metadata file,
+    Raises ``RuntimeError`` if a folder does not contain the metadata file,
     i.e. the video wasn't processed by ``download``.
 
     Parameters
     ----------
-    video_folder_path
-        Path to the per-video ``<video_id>/`` folder created by ``download``.
+    video_folder_paths
+        Paths to the per-video ``<video_id>/`` folders created by ``download``.
     force_extract
         Forces prompt re-extraction, if the prompt file exists.
     """
-    _extract_recipe(video_folder_path, force_extract, verbose)
+    _extract_recipe(video_folder_paths, force_extract, verbose)
 
 
 @app.command
