@@ -41,12 +41,12 @@ Rules:
 
 def extract_prompt_from_video(video_folder_path: Path, force_extract: bool = False):
     id = video_folder_path.name
-    output_path = video_folder_path.joinpath(f"combined_prompt_{id}.txt")
+    output_path = video_folder_path.joinpath(f"combined_prompt.txt")
 
     if output_path.exists() and force_extract is False:
         return output_path.read_text(encoding="utf-8")
 
-    raw_metadata_path = video_folder_path.joinpath(f"raw_metadata_{id}.json")
+    raw_metadata_path = video_folder_path.joinpath(f"raw_metadata.json")
 
     if not raw_metadata_path.exists():
         raise RuntimeError(f"The video {id} was not processed.")
@@ -58,7 +58,7 @@ def extract_prompt_from_video(video_folder_path: Path, force_extract: bool = Fal
         description = metadata["description"]
 
     transcript = "No transcript available for this video."
-    subtitles_path = video_folder_path.joinpath(f"subtitles_{id}.srt")
+    subtitles_path = video_folder_path.joinpath(f"subtitles.srt")
     if subtitles_path.exists():
         with open(subtitles_path, "r", encoding="utf-8") as file:
             # TODO: add a propper subtitles processing
@@ -86,7 +86,7 @@ def process_with_llm(prompt_text: str) -> str:
 
 def save_extracted_recipe(recipe: str, video_folder_path: Path):
     id = video_folder_path.name
-    recipe_path = video_folder_path.joinpath(f"recipe_{id}.md")
+    recipe_path = video_folder_path.joinpath(f"recipe.md")
 
     if not recipe:
         raise RuntimeError(f"The recipe is empty for the video {id}.")

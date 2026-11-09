@@ -21,7 +21,7 @@ class RawMetadata:
     language: str | None
 
     def save(self, path: Path):
-        raw_metadata_path = os.path.join(path, f"raw_metadata_{self.id}.json")
+        raw_metadata_path = os.path.join(path, "raw_metadata.json")
 
         with open(raw_metadata_path, "w", encoding="utf-8") as f:
             json.dump(asdict(self), f, ensure_ascii=False, indent=2)
